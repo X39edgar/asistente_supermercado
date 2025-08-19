@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VENANCIO - Asistente en el Súper</title>
+  <meta name="description" content="VENANCIO: Tu asistente en el súper. Localiza productos, compara marcas, ingredientes, precios por unidad y encuentra ofertas." />
+  <style>
+    :root{
+      --primary:#00b5ad;
+      --accent:#ff6f61;
+      --muted:#f9fafb;
+      --text:#0f172a;
+      --card:#ffffff;
+      --offer:#f59e0b;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Poppins, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Noto Sans; margin:0; padding:0; background:var(--muted); color:var(--text)}
+    header{background:var(--primary);color:#fff;padding:20px;text-align:center}
+    header img{max-width:220px;display:block;margin:0 auto 10px auto}
+    header h1{margin:0;font-size:clamp(1.25rem,2.5vw,1.9rem)}
+    main{max-width:980px;margin:24px auto;padding:20px;background:var(--card);border-radius:16px;box-shadow:0 6px 24px rgba(17,24,39,.08)}
+    h2{color:var(--primary);margin:1rem 0 .5rem}
+    textarea,input,button{width:100%;padding:12px;margin-top:10px;border-radius:10px;border:1px solid #e5e7eb;font-size:1rem}
+    button{background:var(--accent);color:#fff;border:none;cursor:pointer;font-weight:600;transition:.2s}
+    button:hover{filter:brightness(.95);transform:translateY(-1px)}
+    .results{margin-top:12px;padding:12px;background:#f0f9ff;border-radius:10px;border:1px solid #bae6fd}
+    .offer-carousel{display:flex;overflow-x:auto;gap:12px;margin-top:10px;padding-bottom:6px}
+    .offer{flex:0 0 auto;background:var(--offer);color:#fff;padding:14px 16px;border-radius:12px;min-width:170px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+    .fab,.fab-wa{position:fixed;right:20px;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:9999}
+    .fab{background:var(--primary);bottom:20px}
+    .fab-wa{background:#25D366;bottom:90px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <img src="Venancio-logo01.jpeg" alt="Logo Venancio" />
+    <h1>VENANCIO 🛒 — Tu Asistente en el Súper</h1>
+    <p class="sr-only">Localiza productos por pasillo y estante, compara marcas e ingredientes, y descubre ofertas.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="ingresa-lista">
+      <h2 id="ingresa-lista">📝 Ingresa tu lista</h2>
+      <textarea id="lista" rows="4" placeholder="Escribe productos separados por coma o por línea (ej. Leche, Pan, Cereal)"></textarea>
+      <button id="btnProcesar">Procesar Lista</button>
+      <div id="resultado" class="results" role="status" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="ofertas">
+      <h2 id="ofertas">🔥 Ofertas</h2>
+      <div class="offer-carousel" id="ofertasWrap"></div>
+    </section>
+
+    <section aria-labelledby="datos">
+      <h2 id="datos">📇 Déjanos tus datos</h2>
+      <form id="leadForm">
+        <input type="text" id="nombre" placeholder="Nombre" required />
+        <input type="tel" id="telefono" placeholder="Teléfono" />
+        <input type="email" id="email" placeholder="Email" />
+        <textarea id="mensaje" placeholder="Mensaje"></textarea>
+        <button type="submit">Enviar</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- FAB WhatsApp -->
+  <button class="fab-wa" id="btnWA" aria-label="Abrir WhatsApp">📱</button>
+  <!-- FAB Chat (Botpress) -->
+  <button class="fab" id="btnChat" aria-label="Abrir chat de asistencia">💬</button>
+
+  <!-- Botpress Webchat -->
+  <script src="https://cdn.botpress.cloud/webchat/v3.2/inject.js"></script>
+  <script src="https://files.bpcontent.cloud/2025/08/19/20/20250819203450-Y46F0QWK.js" defer></script>
+
+  <script>
+    const DB = [
+      { nombre:"Leche", pasillo:"Lácteos", estante:"A1", precio:25, relacionados:["Cereal","Pan"] },
+      { nombre:"Pan", pasillo:"Panadería", estante:"B2", precio:20, relacionados:["Mermelada"] },
+      { nombre:"Huevo", pasillo:"Lácteos", estante:"A3", precio:40, relacionados:["Tocino"] },
+      { nombre:"Cereal", pasillo:"Despensa", estante:"C1", precio:60, relacionados:["Leche"] },
+      { nombre:"Manzana", pasillo:"Frutas", estante:"D1", precio:30, relacionados:["Plátano","Naranja"] }
+    ];
+    const OFERTAS = [
+      "🍎 Manzanas 2x1",
+      "🥛 10% en leche deslactosada",
+      "🥖 Pan integral -15%",
+      "🥚 2 cartones de huevo por $70"
+    ];
+
+    const $ = (s,root=document)=>root.querySelector(s);
+    $("#btnProcesar").addEventListener("click", ()=>{
+      const texto = $("#lista").value;
+      const productos = texto.split(/,|\n/).map(p=>p.trim()).filter(Boolean);
+      let html = "";
+      let total = 0;
+      for(const p of productos){
+        const item = DB.find(d=>d.nombre.toLowerCase()===p.toLowerCase());
+        if(item){
+          total += item.precio;
+          html += `✅ <strong>${item.nombre}</strong> — ${item.pasillo} (${item.estante}) — $${item.precio}<br/>`;
+          html += `🤝 Relacionados: ${item.relacionados.join(", ")}<br/>`;
+        }else{
+          html += `⚠️ <strong>${p}</strong> — No encontrado<br/>`;
+        }
+      }
+      html += `<hr/>🧮 Total estimado: <b>$${total}</b>`;
+      $("#resultado").innerHTML = html || "Añade productos para empezar.";
+    });
+
+    (function cargarOfertas(){
+      const cont = $("#ofertasWrap");
+      OFERTAS.forEach(txt=>{
+        const d = document.createElement("div");
+        d.className="offer";
+        d.textContent = txt;
+        cont.appendChild(d);
+      });
+    })();
+
+    $("#leadForm").addEventListener("submit", (e)=>{
+      e.preventDefault();
+      alert("¡Datos enviados! ✅");
+      e.target.reset();
+    });
+
+    $("#btnWA").addEventListener("click", ()=>{
+      const numero = "+5215512345678";
+      const msg = encodeURIComponent("Hola, te comparto mi lista de compras 🛒");
+      window.open(`https://wa.me/${numero.replace(/[^\d+]/g,"")}?text=${msg}`,"_blank");
+    });
+
+    // --- Botpress Webchat ---
+    const CONFIG_URL = "https://files.bpcontent.cloud/2025/08/19/20/20250819203450-F0AQLJB7.json";
+
+    function initBotpress() {
+      try {
+        if (!window.botpressWebChat) return;
+        if (window.__venancio_bp_inited) return;
+        window.__venancio_bp_inited = true;
+
+        window.botpressWebChat.init({
+          configUrl: CONFIG_URL,
+          hideWidget: true, // oculta el launcher nativo
+          stylesheet: `
+            body { font-family: 'Poppins', Arial, sans-serif; }
+            .bpw-header { background: #00b5ad; color: #fff; font-weight: 600; }
+            .bpw-header-container::before { 
+              content: url('Venancio-logo01.jpeg'); 
+              display: block; 
+              margin: 4px auto; 
+              max-height: 40px;
+            }
+            .bpw-chat-bubble-content.user { background: #ff6f61; color: #fff; }
+            .bpw-chat-bubble-content.bot { background: #e6f8f7; color: #0f172a; }
+            .bpw-composer { border-top: 2px solid #00b5ad; }
+            .bpw-send-button { background: #00b5ad; color: #fff; }
+            .bpw-date-divider { color: #0f172a; }
+          `,
+          containerWidth: "400px",
+          layoutWidth: "100%"
+        });
+      } catch (err) {
+        console.error("Error inicializando Botpress:", err);
+      }
+    }
+
+    let tries = 0;
+    const iv = setInterval(()=>{
+      tries++;
+      if (window.botpressWebChat) {
+        initBotpress();
+        clearInterval(iv);
+      }
+      if (tries > 20) clearInterval(iv);
+    }, 300);
+
+    $("#btnChat").addEventListener("click", ()=>{
+      if (window.botpressWebChat) {
+        window.botpressWebChat.sendEvent({ type: "SHOW" });
+        window.botpressWebChat.open();
+      } else {
+        alert("Cargando chat… intenta nuevamente en un momento.");
+      }
+    });
+  </script>
+</body>
+</html>
